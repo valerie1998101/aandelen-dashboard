@@ -18,6 +18,7 @@ Commando's (of typ gewoon een zin, bijv. "ik heb 10 ASML gekocht voor 612"):
 import logging
 import math
 import os
+import re
 import threading
 import time
 import uuid
@@ -474,7 +475,51 @@ INTENT_SCHEMA = {
 }
 
 
+_STOP = set("""ik heb hebben had gekocht bijgekocht verkocht koop kocht verkoop ingestapt voor op tegen a à @ per
+stuk stuks aandeel aandelen van de het een en euro eur dollar usd stock stocks shares share koers
+wat is laatste nieuws vandaag gisteren net zojuist graag nu ook nog ze die dat er mijn me""".split())
+
+
+def parse_trade(text: str):
+    """Herken zinnen als 'ik heb 16 quantum aandelen voor 31,11 euro gekocht' zonder AI.
+
+    Geeft (side, aantal, aandeel, koers) terug, of None als het geen aankoop/verkoop is.
+    """
+    low = text.lower()
+    if re.search(r"\bverk(?:ocht|oop|open)\b", low):
+        side = "sell"
+    elif re.search(r"\b(?:bij)?gekocht\b|\bkocht\b|\bingestapt\b|\bkoop\b", low):
+        side = "buy"
+    else:
+        return None
+    price, price_span = None, (-1, -1)
+    m = re.search(r"(?:\b(?:voor|op|tegen|a)\b|à|@)\s*(?:€|eur(?:o)?|\$)?\s*(\d+(?:[.,]\d+)?)", low)
+    if m:
+        price, price_span = _num(m.group(1)), m.span(1)
+    qty = None
+    for n in re.finditer(r"\d+(?:[.,]\d+)?", low):
+        if n.span() != price_span:
+            qty = _num(n.group())
+            break
+    if not qty:
+        return None
+    words = re.findall(r"[a-z][a-z0-9.\-]*", low)
+    stock = [w for w in words if w not in _STOP]
+    if not stock:
+        return None
+    return side, qty, " ".join(stock[:3]), price
+
+
 def handle_free_text(chat, text):
+    parsed = parse_trade(text)
+    if parsed:
+        side, qty, stock, price = parsed
+        return trade(chat, side, stock, qty, price, confirm=True)
+    low = text.lower()
+    if low.strip() in ("overzicht", "portefeuille"):
+        return overview(chat)
+    if re.search(r"\bhoe\b.*\btoe(?:voegen|\s*voegen)\b|\bhelp\b", low):
+        return tg.send(HELP, chat, buttons=MENU)
     if not os.getenv("ANTHROPIC_API_KEY"):
         return tg.send("Gebruik een commando, bijv. /koop ASML 10 612. Typ /help voor alles.", chat)
     tg.typing(chat)
@@ -492,7 +537,9 @@ def handle_free_text(chat, text):
             text, "actie", INTENT_SCHEMA, 300)
     except Exception as ex:
         log.warning("intentie mislukt: %s", ex)
-        return tg.send("Dat begreep ik niet helemaal. Typ /help voor de commando's.", chat)
+        return tg.send("⚠️ Ik kon je bericht niet laten lezen door de AI:\n"
+                       f"<i>{tg.e(agents.explain_error(ex))}</i>\n\n"
+                       "Aankopen werken wel met een commando, bijv. <code>/koop QMCO 16 31,11</code>", chat)
 
     i, stock = r.get("intentie"), r.get("aandeel")
     qty, price = _num(r.get("aantal")), _num(r.get("koers"))

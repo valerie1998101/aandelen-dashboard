@@ -139,8 +139,11 @@ def run(position_ids=None):
                         analyse_position(s, p, weights.get(p.id, 0))
                     except Exception as e:
                         log.exception("analyse %s mislukt", p.ticker)
-                        status["last_error"] = f"{p.ticker}: {e}"
+                        reason = agents.explain_error(e)
+                        status["last_error"] = f"{p.ticker}: {reason}"
                         s.rollback()
+                        if telegram.enabled():
+                            telegram.send(f"⚠️ Analyse van <b>{telegram.e(p.ticker)}</b> mislukt:\n{telegram.e(reason)}")
         _notify.clear()
         status["last_run"] = datetime.utcnow().isoformat() + "Z"
     finally:

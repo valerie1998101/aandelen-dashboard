@@ -30,6 +30,23 @@ def client():
     return _client
 
 
+def explain_error(ex) -> str:
+    """Zet een API-fout om in een begrijpelijke zin."""
+    msg = str(ex)
+    low = msg.lower()
+    if "credit balance" in low or "billing" in low:
+        return "Je Anthropic-tegoed is op of te laag. Voeg tegoed toe op console.anthropic.com → Billing."
+    if isinstance(ex, anthropic.AuthenticationError) or "authentication" in low or "x-api-key" in low:
+        return "De ANTHROPIC_API_KEY klopt niet. Maak een nieuwe aan en zet die in Railway."
+    if isinstance(ex, anthropic.NotFoundError) or "model" in low and "not" in low:
+        return f"Het AI-model bestaat niet of je hebt er geen toegang toe ({msg[:150]})."
+    if isinstance(ex, anthropic.RateLimitError):
+        return "Te veel aanvragen tegelijk bij Anthropic. Probeer het over een minuut opnieuw."
+    if "api_key" in low or "api key" in low:
+        return "ANTHROPIC_API_KEY ontbreekt of is leeg in Railway."
+    return msg[:300]
+
+
 def _call(model, system, user, tool_name, schema, max_tokens=1500):
     resp = client().messages.create(
         model=model,
