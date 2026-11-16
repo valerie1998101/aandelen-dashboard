@@ -23,6 +23,9 @@ from .db import SessionLocal, Position, Trade, init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("main")
+# httpx logt standaard volledige URL's, inclusief het Telegram-token: dat willen we niet
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
