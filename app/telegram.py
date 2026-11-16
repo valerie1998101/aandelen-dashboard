@@ -19,6 +19,11 @@ EMOJI = {"KOPEN": "🟢", "BIJKOPEN": "🟢", "HOUDEN": "🟡", "AFBOUWEN": "�
 e = html.escape
 
 
+def safe(ex) -> str:
+    """Foutmelding zonder token (httpx-fouten bevatten soms de volledige URL)."""
+    return str(ex).replace(TOKEN, "***") if TOKEN else str(ex)
+
+
 def enabled():
     return bool(TOKEN and CHAT_ID)
 
@@ -33,7 +38,7 @@ def call(method: str, timeout=15, **payload):
             log.warning("telegram %s: %s", method, data.get("description"))
         return data
     except Exception as ex:
-        log.warning("telegram %s mislukt: %s", method, ex)
+        log.warning("telegram %s mislukt: %s", method, safe(ex))
         return None
 
 

@@ -95,7 +95,7 @@ def _poll_loop():
                 except Exception:
                     log.exception("bericht verwerken mislukt")
         except Exception as ex:
-            log.warning("polling fout: %s", ex)
+            log.warning("polling fout: %s", tg.safe(ex))
             time.sleep(5)
 
 
