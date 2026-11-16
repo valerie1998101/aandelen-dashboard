@@ -30,7 +30,7 @@ Een mobiele webapp waarin je je aandelen bijhoudt. Drie AI-agents volgen het nie
    │    • niet bijkopen na een sterke stijging (RSI > 70) │
    └───────┬────────────────────────────────────────────┘
            ▼
-   Advies + "waarom" → dashboard op je telefoon (+ Telegram)
+   Advies + "waarom" → Telegram (+ webdashboard)
 ```
 
 De agents draaien automatisch op werkdagen om **09:30 en 17:45** (instelbaar), en wanneer je op **↻ Analyseer nu** tikt.
@@ -40,41 +40,61 @@ De agents draaien automatisch op werkdagen om **09:30 en 17:45** (instelbaar), e
 - **Per aandeel**: advies met zekerheid, de *waarom*-punten, bijkoopzone en breekpunt, wat het advies zou veranderen, de verslagen van de nieuws- en analist-agent, en alle bronartikelen
 - **Bijkoop-calculator**: "als ik X stuks koop op koers Y, wat wordt mijn nieuwe gemiddelde?" en "hoeveel moet ik bijkopen om mijn gemiddelde naar Z te krijgen?"
 - **Meerdere aankopen en verkopen** per aandeel; de gemiddelde koers wordt automatisch berekend
-- **Telegram**: een melding zodra een advies verandert, plus de commando's `/overzicht`, `/analyse` en `/advies ASML.AS`
+- **Alles via Telegram**: aandelen toevoegen in gewone taal, adviezen met knoppen voor de onderbouwing, de bijkoop-calculator, en een melding zodra een advies verandert
+
+---
+
+## Gebruiken via Telegram (aanrader)
+
+Je kunt alles vanuit Telegram doen. Typ gewoon een zin:
+
+| Jij typt | De bot doet |
+|---|---|
+| *ik heb 10 ASML gekocht voor 612* | vraagt "klopt dit?" → slaat op → agents maken meteen een advies |
+| *wat moet ik met Shell?* | advies + waarom, met knoppen 📰 Nieuws · 📊 Analist · 🔗 Bronnen · 🧮 Bijkopen? |
+| *wat wordt mijn gemiddelde als ik 5 ASML bijkoop op 590?* | rekent je nieuwe gemiddelde uit |
+| *hoeveel moet ik bijkopen om op 600 gemiddeld te komen bij ASML?* | aantal stuks + kosten |
+| */overzicht* | hele portefeuille met adviezen |
+
+Alle commando's: `/overzicht` `/advies` `/koop` `/verkoop` `/bijkoop` `/doel` `/analyse` `/transacties` `/notitie` `/verwijder` `/help`.
+
+Als een advies verandert, krijg je vanzelf een bericht.
 
 ---
 
 ## Online zetten op Railway (stap voor stap)
 
-1. **Code op GitHub.** Deze map staat in de repo `aandelen-dashboard`.
-2. Ga naar [railway.com](https://railway.com) → **New Project** → **Deploy from GitHub repo** → kies `aandelen-dashboard`.
-3. Klik in hetzelfde project op **+ Create** → **Database** → **PostgreSQL**. Zo blijven je gegevens bewaard.
-4. Klik op je app-service → **Variables** en voeg toe:
+### 1. Telegram-bot maken (2 minuten)
+1. Open Telegram, zoek **@BotFather** en stuur `/newbot`.
+2. Kies een naam (bijv. *Mijn Aandelen*) en een gebruikersnaam die eindigt op `bot`.
+3. Je krijgt een **token** (iets als `7123456789:AAH...`). Bewaar die.
+
+### 2. Railway
+1. Ga naar [railway.com](https://railway.com) → **New Project** → **Deploy from GitHub repo** → kies `aandelen-dashboard`.
+2. Klik in hetzelfde project op **+ Create** → **Database** → **PostgreSQL**. Zo blijven je gegevens bewaard.
+3. Klik op je app-service → **Variables** en voeg toe:
    | Naam | Waarde |
    |---|---|
    | `ANTHROPIC_API_KEY` | je sleutel van console.anthropic.com |
-   | `APP_PASSWORD` | een wachtwoord om in te loggen |
-   | `SECRET_KEY` | een lange willekeurige tekst (bijv. 40 tekens typen) |
+   | `TELEGRAM_BOT_TOKEN` | het token van BotFather |
+   | `SECRET_KEY` | een lange willekeurige tekst |
    | `DATABASE_URL` | klik **Add Reference** → kies Postgres → `DATABASE_URL` |
-5. Ga naar **Settings** → **Networking** → **Generate Domain**. Je krijgt een adres als `aandelen-dashboard-production.up.railway.app`.
-6. Open dat adres op je telefoon en log in.
+4. Wacht tot de deploy klaar is (groen).
 
-### Op je beginscherm zetten
-- **iPhone (Safari):** deelknop □↑ → *Zet op beginscherm*
-- **Android (Chrome):** menu ⋮ → *App installeren*
+### 3. Koppelen
+1. Stuur je bot in Telegram een bericht, bijv. `hoi`. Hij antwoordt met **je chat-id**.
+2. Zet in Railway de variabele `TELEGRAM_CHAT_ID` = dat nummer. Railway herstart vanzelf.
+3. Stuur `/help`. Klaar! Vanaf nu reageert de bot alleen op jou.
 
-Daarna opent hij als een gewone app, zonder adresbalk.
+### Ook het webdashboard gebruiken? (optioneel)
+Telegram is genoeg, maar het dashboard geeft een mooi overzicht met grafiek en calculator.
+1. Zet de variabele `APP_PASSWORD` (je inlogwachtwoord).
+2. **Settings** → **Networking** → **Generate Domain**, en open dat adres op je telefoon.
+3. Zet hem op je beginscherm. Op een iPhone: in Safari de deelknop □↑ → *Zet op beginscherm*. Op Android: in Chrome ⋮ → *App installeren*.
 
----
+> Zet altijd een `APP_PASSWORD` als je een domein aanmaakt, anders kan iedereen met het adres erbij.
 
-## Telegram koppelen (optioneel)
-
-1. Open Telegram, zoek **@BotFather**, stuur `/newbot` en volg de stappen. Je krijgt een **token**.
-2. Zet in Railway de variabele `TELEGRAM_BOT_TOKEN` = dat token. Railway herstart de app.
-3. Stuur je nieuwe bot een bericht (bijv. `hoi`). Hij antwoordt met **je chat-id**.
-4. Zet in Railway `TELEGRAM_CHAT_ID` = dat nummer. Klaar.
-
-De bot reageert alleen op jouw chat. Wil je bij *elke* analyse een bericht in plaats van alleen bij wijzigingen? Zet dan `TELEGRAM_ALLEEN_WIJZIGINGEN=false`.
+Wil je bij *elke* analyse een bericht in plaats van alleen bij wijzigingen? Zet `TELEGRAM_ALLEEN_WIJZIGINGEN=false`.
 
 ---
 
@@ -121,11 +141,12 @@ Open daarna http://127.0.0.1:8000. Lokaal gebruikt hij een SQLite-bestand (`aand
 
 ```
 app/
-  main.py      web-app, API, planner, Telegram-commando's
+  main.py      web-app, API en planner
+  bot.py       Telegram-bot (commando's, knoppen, gewone zinnen)
   agents.py    de drie agents en hun opdrachten (hier pas je hun regels aan)
   analysis.py  portefeuille-berekening en de agent-pijplijn
   market.py    koersen, kengetallen en nieuws
   db.py        database (posities, transacties, adviezen)
-  telegram.py  meldingen
+  telegram.py  berichten versturen en opmaken
   static/      de mobiele app (HTML/CSS/JS)
 ```

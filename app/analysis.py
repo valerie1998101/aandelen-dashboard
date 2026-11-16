@@ -100,12 +100,16 @@ def analyse_position(session, p: Position, weight_pct: float):
 
     # Telegram: standaard alleen als het advies verandert (of het eerste advies is)
     only_changes = os.getenv("TELEGRAM_ALLEEN_WIJZIGINGEN", "true").lower() != "false"
-    if telegram.enabled() and (not only_changes or prev != adv.action):
-        telegram.send(telegram.format_advice(p.ticker, p.name, adv.to_dict(), prev, app_url()))
+    forced = p.id in _notify or None in _notify
+    _notify.discard(p.id)
+    if telegram.enabled() and (forced or not only_changes or prev != adv.action):
+        telegram.send(telegram.format_advice(p.ticker, p.name, adv.to_dict(), prev, app_url(), p.currency),
+                      buttons=telegram.advice_buttons(p.ticker))
     return adv
 
 
 _pending: set = set()   # posities die nog geanalyseerd moeten worden (None = alles)
+_notify: set = set()    # posities waarvan je het resultaat altijd via Telegram krijgt
 
 
 def run(position_ids=None):
@@ -137,6 +141,7 @@ def run(position_ids=None):
                         log.exception("analyse %s mislukt", p.ticker)
                         status["last_error"] = f"{p.ticker}: {e}"
                         s.rollback()
+        _notify.clear()
         status["last_run"] = datetime.utcnow().isoformat() + "Z"
     finally:
         status.update(running=False, current=None)
@@ -146,7 +151,9 @@ def run(position_ids=None):
     return True
 
 
-def run_in_background(position_ids=None):
+def run_in_background(position_ids=None, notify=False):
+    if notify:
+        _notify.update(position_ids or [None])
     already = status["running"]
     if already:
         _pending.update(position_ids or [None])
@@ -154,3 +161,37 @@ def run_in_background(position_ids=None):
     status["running"] = True  # direct tonen in de app
     threading.Thread(target=run, args=(position_ids,), daemon=True).start()
     return True
+
+
+# ------------------------------------------------------------------ transacties
+class TickerNotFound(Exception):
+    pass
+
+
+def add_trade(ticker: str, side: str, quantity: float, price: float | None,
+              fees: float = 0, trade_date=None, name: str | None = None, notes: str = ""):
+    """Voeg een aankoop/verkoop toe. Maakt de positie aan als die nog niet bestaat.
+
+    Geeft (positie_id, is_nieuw) terug. Zonder koers wordt de huidige koers gebruikt.
+    """
+    from datetime import date
+    from .db import Trade
+    ticker = ticker.strip().upper()
+    with SessionLocal() as s:
+        p = s.query(Position).filter_by(ticker=ticker).first()
+        new = p is None
+        q = None
+        if new:
+            q = market.get_quote(ticker)
+            if q["price"] is None and not name:
+                raise TickerNotFound(ticker)
+            p = Position(ticker=ticker, name=name or q["name"], currency=q["currency"], notes=notes)
+            s.add(p)
+            s.flush()
+        if quantity and quantity > 0:
+            if not price:
+                price = (q or market.get_quote(ticker))["price"]
+            s.add(Trade(position_id=p.id, side=side, quantity=quantity, price=price,
+                        fees=fees or 0, trade_date=trade_date or date.today()))
+        s.commit()
+        return p.id, new

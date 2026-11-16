@@ -18,8 +18,8 @@ from fastapi.staticfiles import StaticFiles
 from itsdangerous import URLSafeTimedSerializer, BadSignature
 from pydantic import BaseModel
 
-from . import analysis, market, telegram
-from .db import SessionLocal, Position, Trade, Advice, init_db
+from . import analysis, bot, market, telegram
+from .db import SessionLocal, Position, Trade, init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("main")
@@ -48,17 +48,13 @@ def startup():
                           id=f"analyse-{t}", replace_existing=True, misfire_grace_time=3600)
     scheduler.start()
     log.info("Automatische analyse op werkdagen om: %s (%s)", ANALYSE_TIJDEN or "uit", TZ)
-    if telegram.TOKEN and analysis.app_url():
-        telegram.set_webhook(analysis.app_url(), _tg_secret())
+    bot.start()  # Telegram-bot (alleen als TELEGRAM_BOT_TOKEN is ingesteld)
 
 
 @app.on_event("shutdown")
 def shutdown():
     scheduler.shutdown(wait=False)
-
-
-def _tg_secret():
-    return hmac.new(SECRET_KEY.encode(), b"telegram", "sha256").hexdigest()[:48]
+    bot.stop()
 
 
 # ------------------------------------------------------------------ inloggen
@@ -134,21 +130,11 @@ class NewPosition(NewTrade):
 
 @app.post("/api/positions")
 def add_position(body: NewPosition, _=Depends(require_login)):
-    ticker = body.ticker.strip().upper()
-    with SessionLocal() as s:
-        p = s.query(Position).filter_by(ticker=ticker).first()
-        if not p:
-            q = market.get_quote(ticker)
-            if q["price"] is None and not body.name:
-                raise HTTPException(400, f"Ticker {ticker} niet gevonden. Tip: Nederlandse aandelen eindigen op .AS (bijv. ASML.AS)")
-            p = Position(ticker=ticker, name=body.name or q["name"], currency=q["currency"], notes=body.notes)
-            s.add(p)
-            s.flush()
-        if body.quantity > 0:
-            s.add(Trade(position_id=p.id, side=body.side, quantity=body.quantity, price=body.price,
-                        fees=body.fees, trade_date=body.trade_date or date.today()))
-        s.commit()
-        pid = p.id
+    try:
+        pid, _new = analysis.add_trade(body.ticker, body.side, body.quantity, body.price, body.fees,
+                                       body.trade_date, body.name, body.notes)
+    except analysis.TickerNotFound as e:
+        raise HTTPException(400, f"Ticker {e} niet gevonden. Tip: Nederlandse aandelen eindigen op .AS (bijv. ASML.AS)")
     if os.getenv("ANTHROPIC_API_KEY"):
         analysis.run_in_background([pid])  # meteen een eerste advies laten maken
     return {"id": pid}
@@ -235,53 +221,6 @@ def analyse(body: AnalyseRequest, _=Depends(require_login)):
 @app.get("/api/status")
 def get_status(_=Depends(require_login)):
     return analysis.status
-
-
-# ------------------------------------------------------------------ telegram
-@app.post("/telegram/webhook")
-async def telegram_webhook(request: Request):
-    if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != _tg_secret():
-        raise HTTPException(403)
-    upd = await request.json()
-    msg = upd.get("message") or {}
-    chat_id = str((msg.get("chat") or {}).get("id", ""))
-    text = (msg.get("text") or "").strip()
-    if not chat_id or not text:
-        return {"ok": True}
-    if not telegram.CHAT_ID or chat_id != telegram.CHAT_ID:
-        # Alleen jouw eigen chat krijgt antwoord. Zo vind je ook je chat-id.
-        telegram.send(f"Jouw chat-id is <code>{chat_id}</code>. Zet deze als TELEGRAM_CHAT_ID in Railway.", chat_id)
-        return {"ok": True}
-
-    cmd = text.split()[0].lower().split("@")[0]
-    if cmd in ("/start", "/help"):
-        telegram.send("Commando's:\n/overzicht – je posities met advies\n/analyse – nu alles laten analyseren\n"
-                      "/advies TICKER – laatste advies met uitleg")
-    elif cmd == "/overzicht":
-        with SessionLocal() as s:
-            pf = analysis.portfolio(s)
-        lines = [f"<b>Portefeuille:</b> €{pf['total_eur']:,.0f} ({pf['pl_pct']:+.1f}%)\n"]
-        for v in pf["positions"]:
-            a = v["advice"]
-            act = f"{telegram.EMOJI.get(a['action'], '')} {a['action']}" if a else "– nog geen advies"
-            pl = f"{v['pl_pct']:+.1f}%" if v["pl_pct"] is not None else ""
-            lines.append(f"<b>{v['ticker']}</b> {pl} · {act}")
-        telegram.send("\n".join(lines))
-    elif cmd == "/analyse":
-        ok = analysis.run_in_background()
-        telegram.send("Agents zijn gestart, je krijgt bericht bij gewijzigde adviezen." if ok else "Er loopt al een analyse.")
-    elif cmd == "/advies":
-        parts = text.split()
-        if len(parts) < 2:
-            telegram.send("Gebruik: /advies ASML.AS")
-        else:
-            with SessionLocal() as s:
-                p = s.query(Position).filter(Position.ticker == parts[1].upper()).first()
-                if not p or not p.advices:
-                    telegram.send("Geen advies gevonden voor dat aandeel.")
-                else:
-                    telegram.send(telegram.format_advice(p.ticker, p.name, p.advices[0].to_dict(), None, analysis.app_url()))
-    return {"ok": True}
 
 
 # ------------------------------------------------------------------ frontend
