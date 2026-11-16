@@ -14,9 +14,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./aandelen.db")
-# Railway geeft soms postgres:// — SQLAlchemy wil postgresql://
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# Railway geeft postgres:// of postgresql:// — wij gebruiken expliciet de psycopg2-driver
+for prefix in ("postgres://", "postgresql://"):
+    if DATABASE_URL.startswith(prefix):
+        DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len(prefix):]
 
 engine = create_engine(
     DATABASE_URL,
