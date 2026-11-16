@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1513">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Aandelen">
+<title>Aandelen</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main id="app"></main>
+<nav id="tabs" hidden>
+  <a href="#/" data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 12l9-8 9 8M5 10v10h14V10"/></svg>Overzicht</a>
+  <a href="#/nieuw" data-tab="new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Toevoegen</a>
+</nav>
+<div id="toast" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
